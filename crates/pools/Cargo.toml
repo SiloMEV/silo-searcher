@@ -1,0 +1,16 @@
+[package]
+name = "pools"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+alloy.workspace = true
+eyre.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+serde.workspace = true
+tokio.workspace = true
+tracing-subscriber.workspace = true
+lazy_static.workspace = true
+config = { path = "../config" }
+types = { path = "../types" }
