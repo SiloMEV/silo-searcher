@@ -1,6 +1,5 @@
 use std::fmt::{Display, Formatter};
 use alloy::primitives::{Address, U256};
-use eyre::ErrReport;
 use serde::{Deserialize, Serialize};
 
 pub trait Pool: Sync + Send {
@@ -14,26 +13,19 @@ pub trait Pool: Sync + Send {
 
     fn get_address(&self) -> Address;
 
-    fn get_fee(&self) -> U256 {
-        U256::ZERO
-    }
+    fn get_fee(&self) -> u32 { 0 }
 
     fn get_tokens(&self) -> Vec<Address> {
         Vec::new()
     }
 
-    fn get_swap_directions(&self) -> Vec<(Address, Address)> {
-        Vec::new()
-    }
-
-    fn calculate_out_amount(
+    fn calc_amount_out(
         &self,
-        token_address_from: &Address,
-        token_address_to: &Address,
-        in_amount: U256,
-    ) -> Result<(U256, u64), ErrReport>;
+        amount_in: U256,
+        tok_in: Address,
+    ) -> eyre::Result<U256>;
 
-    fn can_flash_swap(&self) -> bool;
+    fn can_flash_swap(&self) -> bool { false }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,6 +35,12 @@ pub enum PoolProtocol {
     UniswapV2Like,
     UniswapV3,
     UniswapV3Like,
+}
+
+impl Default for PoolProtocol {
+    fn default() -> Self {
+        PoolProtocol::Unknown
+    }
 }
 
 impl Display for PoolProtocol {

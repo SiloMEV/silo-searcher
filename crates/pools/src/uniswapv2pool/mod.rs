@@ -1,34 +1,22 @@
 #[cfg(test)]
 mod tests;
+mod abi;
 
 use alloy::eips::BlockNumberOrTag;
 use alloy::{
     network::Network,
     primitives::{Address, U256},
     providers::Provider,
-    sol,
     transports::Transport,
 };
 use eyre::{eyre, ErrReport, Result};
 use lazy_static::lazy_static;
 use tracing::{debug, instrument};
 use types::pool::PoolProtocol;
+use crate::uniswapv2pool::abi::IUniswapV2Pair;
 
 lazy_static! {
     static ref U112_MASK: U256 = (U256::from(1) << 112) - U256::from(1);
-}
-
-sol! {
-    #[derive(Debug, PartialEq, Eq)]
-    #[sol(rpc)]
-    contract IUniswapV2Pair {
-        event Sync(uint112 reserve0, uint112 reserve1);
-        function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
-        function token0() external view returns (address);
-        function token1() external view returns (address);
-        function swap(uint256 amount0Out, uint256 amount1Out, address to, bytes calldata data);
-        function factory() external view returns (address);
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -116,7 +104,7 @@ impl UniswapV2Pool {
         Ok((reserve_0, reserve_1))
     }
 
-    fn calculate_out_amount(
+    fn calc_out_amount(
         &self,
         token_address_from: &Address,
         token_address_to: &Address,

@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests;
+
 use eyre::Result;
 use serde::Deserialize;
 use std::fs;
@@ -11,7 +12,9 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Self { ethereum: Some(EthereumConfig { url: "https://rpc.ankr.com/eth".to_string() }) }
+        Self {
+            ethereum: Some(EthereumConfig { url: "https://mainnet.infura.io/v3/408a6d5377c3413dad84dac4c9640df0".to_string() })
+        }
     }
 }
 

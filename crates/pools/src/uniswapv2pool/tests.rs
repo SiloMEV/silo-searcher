@@ -38,7 +38,7 @@ async fn test_fetch_reserves() {
 #[tokio::test]
 async fn test_calculate_amount_out() {
     let _ = tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_max_level(tracing::Level::INFO)
         .try_init();
 
     let cfg = Config::default();
@@ -50,6 +50,6 @@ async fn test_calculate_amount_out() {
         .await
         .unwrap();
     let in_amount = U256::from(U256::from(10).pow(U256::from(18)));
-    let out_amount = pool.calculate_out_amount(&pool.token0, &pool.token1, in_amount);
+    let out_amount = pool.calc_out_amount(&pool.token0, &pool.token1, in_amount);
     println!("out_amount {:?}", out_amount);
 }

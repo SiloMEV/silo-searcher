@@ -5,7 +5,10 @@ edition = "2021"
 [workspace]
 resolver = "2"
 members = [
-   "crates/pools", "bin/arb", "crates/config", "crates/types",
+   "crates/pools",
+   "bin/arb",
+   "crates/config",
+   "crates/types"
 ]
 
 [profile.release]
@@ -25,4 +28,6 @@ crossbeam-channel = "0.5"
 toml = "0.8.19"
 async-trait = "0.1"
 lazy_static = "1.5.0"
+uniswap_v3_math = { git = "https://github.com/0xKitsune/uniswap-v3-math.git" }
+
 
