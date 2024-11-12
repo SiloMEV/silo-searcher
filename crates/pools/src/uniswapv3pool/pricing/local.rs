@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uniswap_v3_math::tick_math::{MAX_SQRT_RATIO, MAX_TICK, MIN_SQRT_RATIO, MIN_TICK};
 use crate::uniswapv3pool::slot0::Slot0;
-use crate::uniswapv3pool::{UniswapV3PoolData, UniswapV3PoolState};
+use crate::uniswapv3pool::{UniswapV3PoolState};
 
 pub const U256_1: U256 = U256::from_limbs([1, 0, 0, 0]);
 
@@ -52,16 +52,6 @@ pub struct PoolData {
     pub tok0: Address,
     pub fee: u32,
     pub tick_spacing: u32,
-}
-
-impl From<UniswapV3PoolData> for PoolData {
-    fn from(val: UniswapV3PoolData) -> Self {
-        Self {
-            tok0: val.tok0,
-            fee: val.fee,
-            tick_spacing: val.tick_spacing,
-        }
-    }
 }
 
 /// Ephemeral pool data.

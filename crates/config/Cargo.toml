@@ -7,3 +7,4 @@ edition.workspace = true
 serde.workspace = true
 toml.workspace = true
 eyre.workspace = true
+alloy.workspace = true

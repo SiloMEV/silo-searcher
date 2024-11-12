@@ -1,0 +1,20 @@
+[providers.Ethereum]
+api = "https://rpc.ankr.com/eth"
+
+[addresses.Ethereum.uniswap_v2.pools]
+"USDC_WETH" = "C5Be99A02C6857f9Eac67bbCE58DF5572498F40c"
+
+[addresses.Ethereum.uniswap_v2.core]
+router02 = "7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
+
+[addresses.Ethereum.uniswap_v2.periphery]
+
+[addresses.Ethereum.uniswap_v3.pools]
+"USDC_WETH" = "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
+
+[addresses.Ethereum.uniswap_v3.core]
+
+[addresses.Ethereum.uniswap_v3.periphery]
+quoter = "b27308f9F90D607463bb33eA1BeBb41C27CE5AB6"
+quoter_v2 = "61fFE014bA17989E743c5F6cB21bF9697530B21e"
+tick_lens = "bfd8137f7d1516d3ea5ca83523914859ec47f573"

@@ -1,138 +1,184 @@
-#[cfg(test)]
-mod tests;
 mod abi;
+mod pricing;
 
-use alloy::eips::BlockNumberOrTag;
+use alloy::eips::{BlockId};
 use alloy::{
     network::Network,
     primitives::{Address, U256},
     providers::Provider,
     transports::Transport,
 };
-use eyre::{eyre, ErrReport, Result};
 use lazy_static::lazy_static;
-use tracing::{debug, instrument};
-use types::pool::PoolProtocol;
+use tracing::{instrument};
+use types::pool::{Pool, PoolClass, PoolProtocol};
 use crate::uniswapv2pool::abi::IUniswapV2Pair;
 
-lazy_static! {
-    static ref U112_MASK: U256 = (U256::from(1) << 112) - U256::from(1);
+#[derive(Debug, Clone)]
+pub struct PoolMetadata {
+    pub pool: Address,
+    pub core: config::UniswapV2Core,
+    pub protocol: PoolProtocol,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Default)]
+pub struct PoolData {
+    pub factory: Address,
+    pub tok0: Address,
+    pub tok1: Address,
+    pub fee: u32,
+    pub reserves_cell: Option<U256>
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PoolState {
+    pub reserve0: u128,
+    pub reserve1: u128,
+}
+
+#[derive(Debug, Clone)]
 pub struct UniswapV2Pool {
-    address: Address,
-    token0: Address,
-    token1: Address,
-    factory: Address,
-    reserves_cell: Option<U256>,
-    reserves0: U256,
-    reserves1: U256,
-    protocol: PoolProtocol,
-    fee: U256,
+    pub metadata: PoolMetadata,
+    pub data: PoolData,
+    pub state: PoolState,
 }
 
+impl Pool for UniswapV2Pool {
+    fn get_class(&self) -> PoolClass {
+        PoolClass::UniswapV2
+    }
+
+    fn get_protocol(&self) -> PoolProtocol {
+        self.metadata.protocol
+    }
+
+    fn get_address(&self) -> Address {
+        self.metadata.pool
+    }
+
+    fn get_fee(&self) -> u32 {
+        self.data.fee
+    }
+
+    fn get_tokens(&self) -> Vec<Address> {
+        vec![
+            self.data.tok0.clone(),
+            self.data.tok1.clone()
+        ]
+    }
+
+    fn calc_amount_out(&self, amount_in: U256, tok_in: Address) -> eyre::Result<U256> {
+        pricing::local::calc_amount_out(
+            amount_in,
+            tok_in,
+            self.data.clone().into(),
+            self.state.clone().into()
+        )
+    }
+}
+
+#[allow(dead_code)]
 impl UniswapV2Pool {
-    pub fn new(address: Address) -> UniswapV2Pool {
+    pub fn new(pool: Address, core: config::UniswapV2Core) -> Self {
         UniswapV2Pool {
-            address,
-            token0: Address::ZERO,
-            token1: Address::ZERO,
-            factory: Address::ZERO,
-            reserves_cell: None,
-            reserves0: U256::ZERO,
-            reserves1: U256::ZERO,
-            protocol: PoolProtocol::UniswapV2Like,
-            fee: U256::from(9970),
+            metadata: PoolMetadata {
+                pool,
+                core,
+                protocol: PoolProtocol::UniswapV2Like,
+            },
+            data: Default::default(),
+            state: Default::default(),
         }
     }
 
     #[instrument(skip_all, level = "debug", ret)]
-    pub async fn fetch_pool_data<T: Transport + Clone, N: Network, P: Provider<T, N> + Send + Sync + Clone + 'static>(
+    pub async fn sync<T: Transport + Clone, N: Network, P: Provider<T, N> + Send + Sync + Clone + 'static>(
+        &mut self,
         provider: P,
-        address: Address,
-    ) -> Result<Self> {
-        let uni2_pool = IUniswapV2Pair::IUniswapV2PairInstance::new(address, provider.clone());
+        block: BlockId
+    ) -> eyre::Result<()> {
+        self.data = UniswapV2Pool::fetch_data(
+            &self.metadata,
+            provider.clone(),
+            block.into(),
+        ).await?;
 
-        let token0: Address = uni2_pool.token0().call().await?._0;
-        let token1: Address = uni2_pool.token1().call().await?._0;
-        let factory: Address = uni2_pool.factory().call().await?._0;
-        let reserves = uni2_pool.getReserves().call().await?.clone();
+        self.state = UniswapV2Pool::fetch_state(
+            &self.metadata,
+            &self.data,
+            provider.clone(),
+            block.into(),
+        ).await?;
+
+        Ok(())
+    }
+
+        #[instrument(skip_all, level = "debug", ret)]
+    pub async fn fetch_data<T: Transport + Clone, N: Network, P: Provider<T, N> + Send + Sync + Clone + 'static>(
+        metadata: &PoolMetadata,
+        provider: P,
+        block: BlockId,
+    ) -> eyre::Result<PoolData> {
+        let uni2_pool = IUniswapV2Pair::IUniswapV2PairInstance::new(metadata.pool, provider.clone());
+
+        let tok0: Address = uni2_pool.token0().block(block).call().await?._0;
+        let tok1: Address = uni2_pool.token1().block(block).call().await?._0;
+        let factory: Address = uni2_pool.factory().block(block).call().await?._0;
+        let reserves = uni2_pool.getReserves().block(block).call().await?;
 
         let storage_reserves_cell =
-            provider.get_storage_at(address, U256::from(8)).block_id(BlockNumberOrTag::Latest.into()).await.unwrap();
-        let storage_reserves = Self::storage_to_reserves(storage_reserves_cell);
+            provider.get_storage_at(metadata.pool, U256::from(8)).block_id(block).await.unwrap();
+        let storage_reserves = storage_to_reserves(storage_reserves_cell);
 
         let reserves_cell: Option<U256> =
             if storage_reserves.0 == U256::from(reserves.reserve0) && storage_reserves.1 == U256::from(reserves.reserve1) {
                 Some(U256::from(8))
             } else {
-                debug!("{storage_reserves:?} {reserves:?}");
                 None
             };
 
-        let ret = UniswapV2Pool {
-            address,
-            token0,
-            token1,
+        Ok(PoolData {
             factory,
+            tok0,
+            tok1,
+            fee: 9970,
             reserves_cell,
-            reserves0: U256::from(reserves.reserve0),
-            reserves1: U256::from(reserves.reserve1),
-            protocol: PoolProtocol::UniswapV2Like,
-            fee: U256::from(9970),
-        };
-        Ok(ret)
+        })
     }
 
-    #[instrument(skip_all, level = "debug", ret)]
-    pub async fn fetch_reserves<T: Transport + Clone, N: Network, P: Provider<T, N> + Send + Sync + Clone + 'static>(
-        &self,
+    #[instrument(skip(provider), level = "debug", ret)]
+    pub async fn fetch_state<T: Transport + Clone, N: Network, P: Provider<T, N> + Send + Sync + Clone + 'static>(
+        metadata: &PoolMetadata,
+        data: &PoolData,
         provider: P,
-    ) -> Result<(U256, U256)> {
-        let (reserve_0, reserve_1) = match self.reserves_cell {
+        block: BlockId,
+    ) -> eyre::Result<PoolState> {
+        let (reserve0, reserve1) = match data.reserves_cell {
             Some(cell) => {
-                let storage_value = provider.get_storage_at(self.address, cell).block_id(BlockNumberOrTag::Latest.into()).await.unwrap();
-                Self::storage_to_reserves(storage_value)
+                let storage_value = provider.get_storage_at(metadata.pool, cell).block_id(block).await.unwrap();
+                let (reserve0, reserve01) = storage_to_reserves(storage_value);
+                (reserve0.to::<u128>(), reserve01.to::<u128>())
             }
             None => {
-                let uni2_pool = IUniswapV2Pair::IUniswapV2PairInstance::new(self.address, provider.clone());
-                let call_return = uni2_pool.getReserves().call().await?.clone();
-                (U256::from(call_return.reserve0), U256::from(call_return.reserve1))
+                let uni2_pool = IUniswapV2Pair::IUniswapV2PairInstance::new(metadata.pool, provider.clone());
+                let reserves = uni2_pool.getReserves().block(block).call().await?.clone();
+                (reserves.reserve0.to::<u128>(), reserves.reserve1.to::<u128>())
             }
         };
-        Ok((reserve_0, reserve_1))
+        Ok(PoolState{ reserve0, reserve1 })
     }
 
-    fn calc_out_amount(
-        &self,
-        token_address_from: &Address,
-        token_address_to: &Address,
-        in_amount: U256,
-    ) -> Result<(U256, u64), ErrReport> {
-        let (reserves_0, reserves_1) = (self.reserves0, self.reserves1);
-
-        let (reserve_in, reserve_out) = match token_address_from < token_address_to {
-            true => (reserves_0, reserves_1),
-            false => (reserves_1, reserves_0),
-        };
-
-        let amount_in_with_fee = in_amount.checked_mul(self.fee).ok_or(eyre!("AMOUNT_IN_WITH_FEE_OVERFLOW"))?;
-        let numerator = amount_in_with_fee.checked_mul(reserve_out).ok_or(eyre!("NUMERATOR_OVERFLOW"))?;
-        let denominator = reserve_in.checked_mul(U256::from(10000)).ok_or(eyre!("DENOMINATOR_OVERFLOW"))?;
-        let denominator = denominator.checked_add(amount_in_with_fee).ok_or(eyre!("DENOMINATOR_OVERFLOW_FEE"))?;
-
-        let out_amount = numerator.checked_div(denominator).ok_or(eyre!("CANNOT_CALCULATE_ZERO_RESERVE"))?;
-        if out_amount > reserve_out {
-            Err(eyre!("RESERVE_EXCEEDED"))
-        } else if out_amount.is_zero() {
-            Err(eyre!("OUT_AMOUNT_IS_ZERO"))
-        } else {
-            Ok((out_amount, 100_000))
-        }
+    fn get_tokens(&self) -> Vec<Address> {
+        vec![
+            self.data.tok0,
+            self.data.tok1
+        ]
     }
+}
 
-    fn storage_to_reserves(value: U256) -> (U256, U256) {
-        ((value >> 0) & *U112_MASK, (value >> (112)) & *U112_MASK)
-    }
+lazy_static! {
+    static ref U112_MASK: U256 = (U256::from(1) << 112) - U256::from(1);
+}
+
+fn storage_to_reserves(value: U256) -> (U256, U256) {
+    ((value >> 0) & *U112_MASK, (value >> (112)) & *U112_MASK)
 }

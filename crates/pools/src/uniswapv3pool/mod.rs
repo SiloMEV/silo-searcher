@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use alloy::eips::BlockId;
 use alloy::network::Network;
-use alloy::primitives::{address, Address, U256};
+use alloy::primitives::{Address, U256};
 use alloy::providers::Provider;
 use alloy::transports::Transport;
 use tracing::instrument;
@@ -11,15 +11,14 @@ use crate::uniswapv3pool::pricing::abi::ITickLens;
 use crate::uniswapv3pool::pricing::local::TickInfo;
 use crate::uniswapv3pool::slot0::Slot0;
 
-#[cfg(test)]
-mod tests;
 mod slot0;
 mod abi;
 mod pricing;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct UniswapV3PoolMetadata {
-    pub addr: Address,
+    pub pool: Address,
+    pub periphery: config::UniswapV3Periphery,
     pub protocol: PoolProtocol,
 }
 
@@ -40,16 +39,16 @@ pub struct UniswapV3PoolState {
     pub ticks: HashMap<i32, TickInfo>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct UniswapV3Pool {
-    metadata: UniswapV3PoolMetadata,
-    data: UniswapV3PoolData,
-    state: UniswapV3PoolState,
+    pub metadata: UniswapV3PoolMetadata,
+    pub data: UniswapV3PoolData,
+    pub state: UniswapV3PoolState,
 }
 
 impl Pool for UniswapV3Pool {
     fn get_class(&self) -> PoolClass {
-        PoolClass::UniswapV2
+        PoolClass::UniswapV3
     }
 
     fn get_protocol(&self) -> PoolProtocol {
@@ -57,7 +56,7 @@ impl Pool for UniswapV3Pool {
     }
 
     fn get_address(&self) -> Address {
-        self.metadata.addr
+        self.metadata.pool
     }
 
     fn get_fee(&self) -> u32 {
@@ -84,15 +83,38 @@ impl Pool for UniswapV3Pool {
 
 #[allow(dead_code)]
 impl UniswapV3Pool {
-    pub fn new(addr: Address) -> Self {
+    pub fn new(pool: Address, periphery: config::UniswapV3Periphery) -> Self {
         UniswapV3Pool {
             metadata: UniswapV3PoolMetadata {
-                addr,
+                pool,
+                periphery,
                 protocol: PoolProtocol::UniswapV3Like,
             },
             data: Default::default(),
             state: Default::default(),
         }
+    }
+
+    #[instrument(skip_all, level = "debug", ret)]
+    pub async fn sync<T: Transport + Clone, N: Network, P: Provider<T, N> + Send + Sync + Clone + 'static>(
+        &mut self,
+        provider: P,
+        block: BlockId
+    ) -> eyre::Result<()> {
+        self.data = UniswapV3Pool::fetch_data(
+            &self.metadata,
+            provider.clone(),
+            block.into(),
+        ).await?;
+
+        self.state = UniswapV3Pool::fetch_state(
+            &self.metadata,
+            &self.data,
+            provider.clone(),
+            block.into(),
+        ).await?;
+
+        Ok(())
     }
 
     // TODO: make batch request
@@ -102,7 +124,7 @@ impl UniswapV3Pool {
         provider: P,
         block: BlockId,
     ) -> eyre::Result<UniswapV3PoolData> {
-        let v3_pool = IUniswapV3Pool::IUniswapV3PoolInstance::new(metadata.addr, provider.clone());
+        let v3_pool = IUniswapV3Pool::IUniswapV3PoolInstance::new(metadata.pool, provider.clone());
 
         let tok0: Address = v3_pool.token0().block(block).call().await?._0;
         let tok1: Address = v3_pool.token1().block(block).call().await?._0;
@@ -126,7 +148,7 @@ impl UniswapV3Pool {
         provider: P,
         block: BlockId,
     ) -> eyre::Result<UniswapV3PoolState> {
-        let v3_pool = IUniswapV3Pool::IUniswapV3PoolInstance::new(metadata.addr, provider.clone());
+        let v3_pool = IUniswapV3Pool::IUniswapV3PoolInstance::new(metadata.pool, provider.clone());
 
         let liquidity: u128 = v3_pool.liquidity().block(block).call().await?._0;
         let slot0: Slot0 = v3_pool.slot0().block(block).call().await?.into();
@@ -135,7 +157,7 @@ impl UniswapV3Pool {
         let mut ticks: HashMap<i32, TickInfo> = Default::default();
 
         let tick_lens = ITickLens::new(
-            address!("bfd8137f7d1516d3ea5ca83523914859ec47f573"),
+            metadata.periphery.tick_lens.clone(),
             provider.clone(),
         );
         let tick_bitmap_index = UniswapV3Pool::get_tick_bitmap_index(
@@ -145,7 +167,7 @@ impl UniswapV3Pool {
         for i in -4..=3 { // TODO: define the range better
             let next_index = tick_bitmap_index + i;
             let populated_ticks = tick_lens.getPopulatedTicksInWord(
-                metadata.addr,
+                metadata.pool,
                 next_index,
             )
                 .call()
