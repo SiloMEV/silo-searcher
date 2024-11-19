@@ -15,9 +15,9 @@
 ╚══════╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝                                                                                                                                                                                                                                    
 ````
 --- 
-Yeehaw! time to wrangle up some Uniswap pool numbers!
+Howdy Farmors! Time to cultivate some DEX pools!
 
-Welcome! This repository provides example code to execute basic decentralized finance (DeFi) transactions on an Ethereum Virtual Machine (EVM) chain, such as Sei, and showcases minimal implementations of concepts related to Miner Extractable Value (MEV). Here, you'll find examples for swaps on both Uniswap V2 and V3 pools, which can serve as starting points for exploring arbitrage opportunities, liquidity pooling, and more complex DeFi strategies.
+Welcome! This repository provides example code to execute basic decentralized finance (DeFi) transactions on an Ethereum Virtual Machine (EVM) chain, such as Sei, and showcases minimal implementations of concepts related to Miner Extractable Value (MEV). Here, you'll find examples for swaps on both Uniswap V2 and V3 style pools, which can serve as starting points for exploring arbitrage opportunities, liquidity pooling, and more complex DeFi strategies.
 
 ## Features
 
@@ -40,6 +40,7 @@ cd silo-searcher
 
 2. Ensure you have Rust installed. If not, install Rust.
 3. Run the following commands to build and execute examples.
+4. Plow the fields and reap your harvest.
 
 ## Usage
 
@@ -63,9 +64,13 @@ cargo run --example uniswapv3pool_amountout
 
 While the current examples show single pool swaps, you can build on this repository to create more complex strategies and add profit-driven simulations:
 
-Triangular Arbitrage: Calculate opportunities across multiple pairs and pools to find potential profits.
-Pure Arbitrage: Simulate profit opportunities from price discrepancies between pools.
+Triangular Arbitrage: Calculate opportunities across multiple pairs and pools to find potential profits.\
+Pure Arbitrage: Simulate profit opportunities from price discrepancies between pools.\
 CEX Arbitrage: Extend this to connect with centralized exchanges for cross-platform arbitrage.
+
+## Get in touch
+
+If you're a searcher and you want to 1) give us feedback 2) flag a bug 3) collab 4) join the team, feel free to reach out to `mev at silostaking.io` 
 
 ## License
 
